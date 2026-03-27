@@ -1,0 +1,39 @@
+project:
+  name: acoustic-event-detection-benchmark
+  seed: 42
+
+data:
+  base_dir: /Volumes/CurrentSave/Data/Kaggle/freesound-audio-tagging-bencmark
+  base_folder_name: FSDKaggle2019.
+  train_dir: audio_train_curated
+  train_noisy_dir: audio_train_noisy
+  val_dir: meta
+  test_dir: audio_test
+  sample_rate: 16000
+  clip_duration: 5.0
+
+features:
+  type: log_mel_spectrogram
+  n_mels: 128
+  n_fft: 1024
+  hop_length: 256
+
+model:
+  name: cnn
+  channels: [16, 32, 64]
+  kernel_size: 3
+  dropout: 0.4
+
+training:
+  batch_size: 64
+  epochs: 30
+  learning_rate: 0.0005
+  weight_decay: 0.0001
+
+evaluation:
+  threshold: 0.5
+
+output:
+  model_dir: reports/models
+  metrics_dir: reports/metrics
+  figures_dir: reports/figures
