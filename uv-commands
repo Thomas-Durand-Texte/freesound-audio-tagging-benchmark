@@ -2,4 +2,4 @@ uv init
 uv add numpy scipy matplotlib jupyter ipykernel pandas
 uv add torch torchaudio librosa soundfile
 uv add --dev ruff pytest
-uv add pyyaml
+uv add pyyaml tqdm duckdb

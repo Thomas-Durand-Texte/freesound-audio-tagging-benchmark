@@ -1,0 +1,7 @@
+filename,problem_type,notes
+f76181c4.wav,wrong_label,Bug in file renaming process
+77b925c2.wav,wrong_label,Bug in file renaming process
+6a1f682a.wav,wrong_label,Bug in file renaming process
+c7db12aa.wav,wrong_label,Bug in file renaming process
+7752cc8a.wav,wrong_label,Bug in file renaming process
+1d44b0bd.wav,corrupted,Format conversion error - contains no signal

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+import duckdb
 import numpy as np
 import pandas as pd
 import soundfile as sf
@@ -38,54 +39,147 @@ class AudioDatasetConfig:
     base_folder_name: str
     sample_rate: int = 16000
     clip_duration: float = 5.0
+    problematic_files_path: Path | None = None
 
     @classmethod
     def from_dict(cls, config_dict: dict) -> "AudioDatasetConfig":
         """Create config from dictionary."""
+        problematic_path = config_dict.get("problematic_files_path")
         return cls(
             base_dir=Path(config_dict["base_dir"]),
             base_folder_name=config_dict["base_folder_name"],
             sample_rate=config_dict.get("sample_rate", 16000),
             clip_duration=config_dict.get("clip_duration", 5.0),
+            problematic_files_path=Path(problematic_path) if problematic_path else None,
         )
 
 
 class MetadataManager:
-    """Manages metadata and vocabulary for audio datasets."""
+    """Manages metadata and vocabulary for audio datasets using DuckDB."""
 
     def __init__(self, config: AudioDatasetConfig) -> None:
-        """Initialize metadata manager.
+        """Initialize metadata manager with DuckDB backend.
 
         Args:
             config: Dataset configuration
         """
         self.config = config
         self.meta_dir = config.base_dir / (config.base_folder_name + "meta")
-        self.vocabulary = self._load_vocabulary()
-        self._metadata_cache: dict[str, pd.DataFrame] = {}
 
-    def _load_vocabulary(self) -> pd.DataFrame:
-        """Load label vocabulary."""
-        return pd.read_csv(self.meta_dir / "vocabulary.csv")
+        # Initialize DuckDB in-memory database
+        self.con = duckdb.connect(":memory:")
 
-    def load_metadata(self, dataset_type: DatasetType) -> pd.DataFrame:
+        # Load vocabulary
+        vocabulary_path = self.meta_dir / "vocabulary.csv"
+        self.con.execute(f"""
+            CREATE TABLE vocabulary AS
+            SELECT * FROM read_csv_auto('{vocabulary_path}')
+        """)
+        self.vocabulary = self.con.execute("SELECT * FROM vocabulary").df()
+
+        # Load all dataset metadata into DuckDB
+        for dataset_type in VALID_DATASETS:
+            metadata_file = self.meta_dir / f"{dataset_type}_post_competition.csv"
+            if metadata_file.exists():
+                self.con.execute(f"""
+                    CREATE TABLE {dataset_type} AS
+                    SELECT fname, labels FROM read_csv_auto('{metadata_file}')
+                """)
+
+        # Load problematic files if path provided
+        if config.problematic_files_path and config.problematic_files_path.exists():
+            self.con.execute(f"""
+                CREATE TABLE problematic AS
+                SELECT * FROM read_csv_auto('{config.problematic_files_path}')
+            """)
+        else:
+            # Create empty table with schema
+            self.con.execute("""
+                CREATE TABLE problematic (
+                    filename VARCHAR,
+                    problem_type VARCHAR,
+                    notes VARCHAR
+                )
+            """)
+
+    def load_metadata(
+        self,
+        dataset_type: DatasetType,
+        skip_problematic: bool = False
+    ) -> pd.DataFrame:
         """Load metadata for specific dataset split.
 
         Args:
             dataset_type: Dataset split to load
+            skip_problematic: Whether to exclude problematic files
 
         Returns:
             DataFrame with fname and labels columns
         """
         validate_dataset_type(dataset_type)
 
-        if dataset_type not in self._metadata_cache:
-            metadata_file = self.meta_dir / f"{dataset_type}_post_competition.csv"
-            self._metadata_cache[dataset_type] = pd.read_csv(metadata_file)[
-                ["fname", "labels"]
-            ]
+        query = f"SELECT fname, labels FROM {dataset_type}"
 
-        return self._metadata_cache[dataset_type]
+        if skip_problematic:
+            query += " WHERE fname NOT IN (SELECT filename FROM problematic)"
+
+        return self.con.execute(query).df()
+
+    def get_problematic_files(self) -> pd.DataFrame:
+        """Get list of all problematic files.
+
+        Returns:
+            DataFrame with problematic files information
+        """
+        return self.con.execute("SELECT * FROM problematic").df()
+
+    def get_label_statistics(
+        self,
+        dataset_type: DatasetType,
+        skip_problematic: bool = False
+    ) -> pd.DataFrame:
+        """Get per-label counts using SQL aggregation.
+
+        Args:
+            dataset_type: Dataset split to analyze
+            skip_problematic: Whether to exclude problematic files
+
+        Returns:
+            DataFrame with label and count columns
+        """
+        validate_dataset_type(dataset_type)
+
+        # Build WHERE clause for problematic files
+        where_clause = ""
+        if skip_problematic:
+            where_clause = "WHERE fname NOT IN (SELECT filename FROM problematic)"
+
+        query = f"""
+            WITH label_split AS (
+                SELECT
+                    fname,
+                    UNNEST(string_split(labels, ',')) as label
+                FROM {dataset_type}
+                {where_clause}
+            )
+            SELECT label, COUNT(*) as count
+            FROM label_split
+            GROUP BY label
+            ORDER BY count DESC
+        """
+
+        return self.con.execute(query).df()
+
+    def query(self, sql: str) -> pd.DataFrame:
+        """Execute arbitrary SQL query on metadata.
+
+        Args:
+            sql: SQL query string
+
+        Returns:
+            DataFrame with query results
+        """
+        return self.con.execute(sql).df()
 
 
 class AudioLoader:

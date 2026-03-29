@@ -9,14 +9,19 @@ data:
   train_noisy_dir: audio_train_noisy
   val_dir: meta
   test_dir: audio_test
-  sample_rate: 16000
+  sample_rate: 44100
   clip_duration: 5.0
+  problematic_files_path: configs/problematic_files.csv
 
-features:
-  type: log_mel_spectrogram
-  n_mels: 128
-  n_fft: 1024
-  hop_length: 256
+spectrogram:
+  # Custom SuperGaussian filter bank parameters
+  f_min: 20.0
+  f_mid: 1000.0
+  f_max: 8000.0
+  n_bands: 128
+  hop_length: 512
+  n_fft: 2048
+  signal_duration: 5.0  # Fixed duration in seconds for multi-resolution method
 
 model:
   name: cnn

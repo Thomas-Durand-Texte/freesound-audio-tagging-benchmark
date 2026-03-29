@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "duckdb>=1.5.1",
     "ipykernel>=7.2.0",
     "jupyter>=1.1.1",
     "librosa>=0.11.0",
@@ -16,6 +17,7 @@ dependencies = [
     "soundfile>=0.13.1",
     "torch>=2.10.0",
     "torchaudio>=2.10.0",
+    "tqdm>=4.67.3",
 ]
 
 [dependency-groups]

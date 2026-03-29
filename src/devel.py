@@ -8,7 +8,7 @@ from pathlib import Path
 
 from src.utils import load_config
 
-from . import data, signal_tools
+from . import data, signal_tools, spectrogram, spectrogram_optimized
 
 
 def play_audio_file(audio_path: Path) -> str:
@@ -145,12 +145,216 @@ def test_audio_loading(config: dict, n_samples: int = 3) -> None:
         # result == "continue" -> play next audio
 
 
+def test_spectrogram_comparison(config: dict, n_samples: int = 3) -> None:
+    """Test and compare spectrograms using custom SuperGaussian vs librosa.
+
+    Args:
+        config: Configuration dictionary
+        n_samples: Number of audio samples to compare
+    """
+    print("\n" + "=" * 70)
+    print("Spectrogram Comparison Test")
+    print("=" * 70)
+
+    # Create dataset config and AudioDataset instance
+    dataset_config = data.AudioDatasetConfig.from_dict(config["data"])
+    dataset = data.AudioDataset(dataset_config, dataset_type="train_curated")
+
+    print(f"\nDataset size: {len(dataset)} samples")
+    print(f"Testing {n_samples} samples for spectrogram comparison")
+
+    # Spectrogram parameters from config (with sensible defaults)
+    spectrogram_config = config.get("spectrogram", {})
+    f_min = spectrogram_config.get("f_min", 20.0)
+    f_max = spectrogram_config.get("f_max", 8000.0)
+    f_mid = spectrogram_config.get("f_mid", 1000.0)
+    n_bands = spectrogram_config.get("n_bands", 128)
+    signal_duration = spectrogram_config.get("signal_duration", 3.0)
+    hop_length = spectrogram_config.get("hop_length", 512)
+
+    print(f"\nSpectrogram parameters:")
+    print(f"  f_min: {f_min} Hz")
+    print(f"  f_max: {f_max} Hz")
+    print(f"  n_bands: {n_bands}")
+    print(f"  signal_duration: {signal_duration} s")
+    print(f"  hop_length: {hop_length}")
+
+
+
+    for i in range(min(n_samples, len(dataset))):
+        row = dataset.metadata.iloc[i]
+        filename = row["fname"]
+        labels = row["labels"]
+        filename = "f2f0a2b1.wav"
+        # Load audio waveform
+        waveform, sample_rate = dataset.audio_loader.load_audio(filename)
+
+        # Limit to first 5 seconds for faster computation
+        max_samples = int(5.0 * sample_rate)
+        if len(waveform) > max_samples:
+            waveform = waveform[:max_samples]
+
+        # Create label for visualization
+        audio_label = f"{filename} - {labels}"
+
+        # Compare spectrograms
+        spectrogram.compare_spectrograms(
+            waveform=waveform,
+            sample_rate=sample_rate,
+            f_min=f_min,
+            f_max=f_max,
+            f_mid=f_mid,
+            n_bands=n_bands,
+            audio_label=audio_label,
+            signal_duration=signal_duration,
+            hop_length=hop_length,
+        )
+
+
+def test_spectrogram_benchmark(config: dict, n_samples: int = 1, test_gpu: bool = False, test_multiresolution: bool = True) -> None:
+    """Benchmark optimized spectrogram methods.
+
+    Args:
+        config: Configuration dictionary
+        n_samples: Number of audio samples to benchmark
+        test_gpu: Whether to test GPU acceleration
+        test_multiresolution: Whether to test multi-resolution method
+    """
+    print("\n" + "=" * 70)
+    print("Spectrogram Methods Benchmark")
+    print("=" * 70)
+
+    # Create dataset config and AudioDataset instance
+    dataset_config = data.AudioDatasetConfig.from_dict(config["data"])
+    dataset = data.AudioDataset(dataset_config, dataset_type="train_curated")
+
+    print(f"\nDataset size: {len(dataset)} samples")
+    print(f"Benchmarking {n_samples} sample(s)")
+
+    # Spectrogram parameters from config (with sensible defaults)
+    spectrogram_config = config.get("spectrogram", {})
+    f_min = spectrogram_config.get("f_min", 20.0)
+    f_max = spectrogram_config.get("f_max", 8000.0)
+    n_bands = spectrogram_config.get("n_bands", 128)
+    hop_length = spectrogram_config.get("hop_length", 512)
+    n_fft = spectrogram_config.get("n_fft", 2048)
+    signal_duration = spectrogram_config.get("signal_duration", 3.0)
+
+    for i in range(min(n_samples, len(dataset))):
+        row = dataset.metadata.iloc[i]
+        filename = row["fname"]
+        labels = row["labels"]
+
+        # Load audio waveform
+        waveform, sample_rate = dataset.audio_loader.load_audio(filename)
+
+        # Limit to first 5 seconds for reasonable benchmark time
+        max_samples = int(5.0 * sample_rate)
+        if len(waveform) > max_samples:
+            waveform = waveform[:max_samples]
+
+        print(f"\n{'=' * 70}")
+        print(f"Sample {i + 1}: {filename}")
+        print(f"Labels: {labels}")
+        print(f"{'=' * 70}")
+
+        # Initialize filter bank (outside timing)
+        print("\nInitializing SuperGaussian filter bank...")
+        import time
+        init_start = time.perf_counter()
+        filter_bank = signal_tools.LogSpacedFilterBank(
+            envelope_class=signal_tools.SuperGaussianEnvelope,
+            f_min=f_min,
+            f_max=f_max,
+            num_bands=n_bands,
+            sample_rate=sample_rate,
+        )
+        init_time = time.perf_counter() - init_start
+        print(f"Filter bank initialization: {init_time * 1000:.2f} ms (done once)")
+
+        # Run benchmark
+        results = spectrogram_optimized.benchmark_spectrogram_methods(
+            waveform=waveform,
+            filter_bank=filter_bank,
+            hop_length=hop_length,
+            n_fft=n_fft,
+            spectrum_threshold=0.01,
+            test_gpu=test_gpu,
+            gpu_device="mps",
+        )
+
+        # Test multi-resolution method if requested
+        if test_multiresolution:
+            print(f"\n{'=' * 70}")
+            print("Testing Multi-Resolution Method")
+            print(f"{'=' * 70}")
+            print(f"Signal duration: {signal_duration} seconds")
+            print("Initializing multi-resolution filter bank...")
+
+            init_start = time.perf_counter()
+            mr_filter_bank = spectrogram_optimized.MultiResolutionFilterBank(
+                envelope_class=signal_tools.SuperGaussianEnvelope,
+                f_min=f_min,
+                f_max=f_max,
+                num_bands=n_bands,
+                sample_rate=sample_rate,
+                signal_duration=signal_duration,
+                spectrum_threshold=0.001,
+            )
+            init_time = time.perf_counter() - init_start
+            print(f"  Initialization time: {init_time * 1000:.2f} ms (done once)")
+            print(f"  Downsample levels used: {mr_filter_bank.downsample_levels}")
+
+            # Compute spectrogram
+            spec, time_step, comp_time = mr_filter_bank.compute_spectrogram(waveform, hop_length)
+            print(f"  Computation time: {comp_time * 1000:.2f} ms")
+            print(f"  Output shape: {spec.shape}")
+            print(f"  Time step: {time_step:.6f} s")
+
+            # Add to results for comparison
+            results["multi_resolution"] = {
+                "init_time_ms": init_time * 1000,
+                "time_ms": comp_time * 1000,
+                "shape": spec.shape,
+                "spectrogram": spec,
+            }
+
+            # Updated summary with multi-resolution
+            print(f"\n{'=' * 70}")
+            print("Updated Performance Summary (including Multi-Resolution)")
+            print(f"{'=' * 70}")
+            print(f"{'Method':<30} {'Time (ms)':<15} {'Speedup vs Librosa':<20}")
+            print(f"{'-' * 70}")
+
+            librosa_time = results.get("librosa", {}).get("time_ms", None)
+            for method, method_data in results.items():
+                time_ms = method_data["time_ms"]
+                if librosa_time:
+                    speedup = librosa_time / time_ms
+                    speedup_str = f"{speedup:.2f}x"
+                else:
+                    speedup_str = "N/A"
+                print(f"{method:<30} {time_ms:<15.2f} {speedup_str:<20}")
+
+
 def main() -> None:
     """Main development entry point."""
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, required=True)
+    parser = argparse.ArgumentParser(description="Development and testing tools")
+    parser.add_argument("--config", type=str, required=True, help="Path to config file")
     parser.add_argument(
         "--n-samples", type=int, default=3, help="Number of audio samples to test"
+    )
+    parser.add_argument(
+        "--test",
+        type=str,
+        choices=["audio", "signal", "spectrogram", "benchmark"],
+        default="signal",
+        help="Which test to run: audio (dataset loading), signal (envelope patterns), spectrogram (comparison), benchmark (optimized methods)",
+    )
+    parser.add_argument(
+        "--test-gpu",
+        action="store_true",
+        help="Test GPU acceleration in benchmark mode (requires PyTorch with MPS)",
     )
     args = parser.parse_args()
 
@@ -158,12 +362,15 @@ def main() -> None:
 
     print("Loaded config:\n", json.dumps(config, indent=4))
 
-    # Test audio dataset loading
-    test_audio_loading(config, n_samples=args.n_samples)
-
-    # Uncomment to test signal processing tools
-    # signal_tools.dev_gaussian()
-    # signal_tools.dev_super_gaussian()
+    # Run selected test
+    if args.test == "audio":
+        test_audio_loading(config, n_samples=args.n_samples)
+    elif args.test == "signal":
+        signal_tools.dev_envelope_pattern()
+    elif args.test == "spectrogram":
+        test_spectrogram_comparison(config, n_samples=args.n_samples)
+    elif args.test == "benchmark":
+        test_spectrogram_benchmark(config, n_samples=args.n_samples, test_gpu=args.test_gpu)
 
 
 if __name__ == "__main__":
