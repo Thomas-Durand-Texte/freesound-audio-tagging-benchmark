@@ -2,10 +2,10 @@ import matplotlib.pyplot as plt
 
 
 def init_figure(
-        figsize: tuple = (10, 6),
-        xlabel: str = None,
-        ylabel: str = None,
-        title: str = None,
+    figsize: tuple = (10, 6),
+    xlabel: str = None,
+    ylabel: str = None,
+    title: str = None,
 ):
     """Initialize figure with optional labels and title.
 

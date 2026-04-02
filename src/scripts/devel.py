@@ -1,14 +1,13 @@
 """Development and testing module for audio dataset functionality."""
 
 import argparse
-import json
 import subprocess
 import sys
 from pathlib import Path
 
-from src.utils import load_config
-
-from . import data, signal_tools, spectrogram, spectrogram_optimized
+from src.core.config import Config
+from src.data.dataset import AudioDataset
+from src.features import signal_tools, spectrogram, spectrogram_optimized
 
 
 def play_audio_file(audio_path: Path) -> str:
@@ -79,20 +78,19 @@ def play_audio_file(audio_path: Path) -> str:
         return "error"
 
 
-def test_audio_loading(config: dict, n_samples: int = 3) -> None:
+def test_audio_loading(config: Config, n_samples: int = 3) -> None:
     """Test audio dataset loading and display info for n samples.
 
     Args:
-        config: Configuration dictionary
+        config: Configuration object
         n_samples: Number of samples to test
     """
     print("\n" + "=" * 60)
     print("Testing AudioDataset")
     print("=" * 60)
 
-    # Create dataset config and AudioDataset instance
-    dataset_config = data.AudioDatasetConfig.from_dict(config["data"])
-    dataset = data.AudioDataset(dataset_config, dataset_type="train_curated")
+    # Create AudioDataset instance using config.data directly
+    dataset = AudioDataset(config.data, dataset_type="train_curated")
 
     print(f"\nDataset size: {len(dataset)} samples")
     print(f"Vocabulary size: {len(dataset.metadata_manager.vocabulary)} labels")
@@ -145,41 +143,37 @@ def test_audio_loading(config: dict, n_samples: int = 3) -> None:
         # result == "continue" -> play next audio
 
 
-def test_spectrogram_comparison(config: dict, n_samples: int = 3) -> None:
+def test_spectrogram_comparison(config: Config, n_samples: int = 3) -> None:
     """Test and compare spectrograms using custom SuperGaussian vs librosa.
 
     Args:
-        config: Configuration dictionary
+        config: Configuration object
         n_samples: Number of audio samples to compare
     """
     print("\n" + "=" * 70)
     print("Spectrogram Comparison Test")
     print("=" * 70)
 
-    # Create dataset config and AudioDataset instance
-    dataset_config = data.AudioDatasetConfig.from_dict(config["data"])
-    dataset = data.AudioDataset(dataset_config, dataset_type="train_curated")
+    # Create AudioDataset instance using config.data directly
+    dataset = AudioDataset(config.data, dataset_type="train_curated")
 
     print(f"\nDataset size: {len(dataset)} samples")
     print(f"Testing {n_samples} samples for spectrogram comparison")
 
-    # Spectrogram parameters from config (with sensible defaults)
-    spectrogram_config = config.get("spectrogram", {})
-    f_min = spectrogram_config.get("f_min", 20.0)
-    f_max = spectrogram_config.get("f_max", 8000.0)
-    f_mid = spectrogram_config.get("f_mid", 1000.0)
-    n_bands = spectrogram_config.get("n_bands", 128)
-    signal_duration = spectrogram_config.get("signal_duration", 3.0)
-    hop_length = spectrogram_config.get("hop_length", 512)
+    # Spectrogram parameters from config using dot notation
+    f_min = config.spectrogram.f_min
+    f_max = config.spectrogram.f_max
+    f_mid = config.spectrogram.f_mid
+    n_bands = config.spectrogram.n_bands
+    signal_duration = config.spectrogram.signal_duration
+    hop_length = config.spectrogram.hop_length
 
-    print(f"\nSpectrogram parameters:")
+    print("\nSpectrogram parameters:")
     print(f"  f_min: {f_min} Hz")
     print(f"  f_max: {f_max} Hz")
     print(f"  n_bands: {n_bands}")
     print(f"  signal_duration: {signal_duration} s")
     print(f"  hop_length: {hop_length}")
-
-
 
     for i in range(min(n_samples, len(dataset))):
         row = dataset.metadata.iloc[i]
@@ -211,11 +205,13 @@ def test_spectrogram_comparison(config: dict, n_samples: int = 3) -> None:
         )
 
 
-def test_spectrogram_benchmark(config: dict, n_samples: int = 1, test_gpu: bool = False, test_multiresolution: bool = True) -> None:
+def test_spectrogram_benchmark(
+    config: Config, n_samples: int = 1, test_gpu: bool = False, test_multiresolution: bool = True
+) -> None:
     """Benchmark optimized spectrogram methods.
 
     Args:
-        config: Configuration dictionary
+        config: Configuration object
         n_samples: Number of audio samples to benchmark
         test_gpu: Whether to test GPU acceleration
         test_multiresolution: Whether to test multi-resolution method
@@ -224,21 +220,19 @@ def test_spectrogram_benchmark(config: dict, n_samples: int = 1, test_gpu: bool 
     print("Spectrogram Methods Benchmark")
     print("=" * 70)
 
-    # Create dataset config and AudioDataset instance
-    dataset_config = data.AudioDatasetConfig.from_dict(config["data"])
-    dataset = data.AudioDataset(dataset_config, dataset_type="train_curated")
+    # Create AudioDataset instance using config.data directly
+    dataset = AudioDataset(config.data, dataset_type="train_curated")
 
     print(f"\nDataset size: {len(dataset)} samples")
     print(f"Benchmarking {n_samples} sample(s)")
 
-    # Spectrogram parameters from config (with sensible defaults)
-    spectrogram_config = config.get("spectrogram", {})
-    f_min = spectrogram_config.get("f_min", 20.0)
-    f_max = spectrogram_config.get("f_max", 8000.0)
-    n_bands = spectrogram_config.get("n_bands", 128)
-    hop_length = spectrogram_config.get("hop_length", 512)
-    n_fft = spectrogram_config.get("n_fft", 2048)
-    signal_duration = spectrogram_config.get("signal_duration", 3.0)
+    # Spectrogram parameters from config using dot notation
+    f_min = config.spectrogram.f_min
+    f_max = config.spectrogram.f_max
+    n_bands = config.spectrogram.n_bands
+    hop_length = config.spectrogram.hop_length
+    n_fft = config.spectrogram.n_fft
+    signal_duration = config.spectrogram.signal_duration
 
     for i in range(min(n_samples, len(dataset))):
         row = dataset.metadata.iloc[i]
@@ -261,6 +255,7 @@ def test_spectrogram_benchmark(config: dict, n_samples: int = 1, test_gpu: bool 
         # Initialize filter bank (outside timing)
         print("\nInitializing SuperGaussian filter bank...")
         import time
+
         init_start = time.perf_counter()
         filter_bank = signal_tools.LogSpacedFilterBank(
             envelope_class=signal_tools.SuperGaussianEnvelope,
@@ -341,9 +336,7 @@ def main() -> None:
     """Main development entry point."""
     parser = argparse.ArgumentParser(description="Development and testing tools")
     parser.add_argument("--config", type=str, required=True, help="Path to config file")
-    parser.add_argument(
-        "--n-samples", type=int, default=3, help="Number of audio samples to test"
-    )
+    parser.add_argument("--n-samples", type=int, default=3, help="Number of audio samples to test")
     parser.add_argument(
         "--test",
         type=str,
@@ -358,9 +351,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    config = load_config(args.config)
+    # Load configuration using new Config.from_yaml method
+    config = Config.from_yaml(args.config)
 
-    print("Loaded config:\n", json.dumps(config, indent=4))
+    print("Configuration loaded successfully!")
+    print(f"Project: {config.project.name}")
+    print(f"Data directory: {config.data.base_dir}")
+    print(f"Sample rate: {config.data.sample_rate} Hz")
+    print(f"Spectrogram bands: {config.spectrogram.n_bands}")
 
     # Run selected test
     if args.test == "audio":

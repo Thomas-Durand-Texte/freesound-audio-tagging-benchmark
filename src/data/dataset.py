@@ -1,8 +1,7 @@
 """Audio dataset management for Freesound Audio Tagging benchmark."""
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import duckdb
 import numpy as np
@@ -10,6 +9,9 @@ import pandas as pd
 import soundfile as sf
 import torch
 from torch.utils.data import Dataset
+
+if TYPE_CHECKING:
+    from src.core.config import DataConfig
 
 DatasetType = Literal["train_curated", "train_noisy", "test"]
 VALID_DATASETS: tuple[str, ...] = ("train_curated", "train_noisy", "test")
@@ -26,42 +28,17 @@ def validate_dataset_type(dataset_type: str) -> None:
     """
     if dataset_type not in VALID_DATASETS:
         valid_options = " | ".join(VALID_DATASETS)
-        raise ValueError(
-            f"Invalid dataset type: {dataset_type}. Must be {valid_options}."
-        )
-
-
-@dataclass
-class AudioDatasetConfig:
-    """Configuration for audio dataset paths and parameters."""
-
-    base_dir: Path
-    base_folder_name: str
-    sample_rate: int = 16000
-    clip_duration: float = 5.0
-    problematic_files_path: Path | None = None
-
-    @classmethod
-    def from_dict(cls, config_dict: dict) -> "AudioDatasetConfig":
-        """Create config from dictionary."""
-        problematic_path = config_dict.get("problematic_files_path")
-        return cls(
-            base_dir=Path(config_dict["base_dir"]),
-            base_folder_name=config_dict["base_folder_name"],
-            sample_rate=config_dict.get("sample_rate", 16000),
-            clip_duration=config_dict.get("clip_duration", 5.0),
-            problematic_files_path=Path(problematic_path) if problematic_path else None,
-        )
+        raise ValueError(f"Invalid dataset type: {dataset_type}. Must be {valid_options}.")
 
 
 class MetadataManager:
     """Manages metadata and vocabulary for audio datasets using DuckDB."""
 
-    def __init__(self, config: AudioDatasetConfig) -> None:
+    def __init__(self, config: "DataConfig") -> None:
         """Initialize metadata manager with DuckDB backend.
 
         Args:
-            config: Dataset configuration
+            config: Data configuration from src.core.config
         """
         self.config = config
         self.meta_dir = config.base_dir / (config.base_folder_name + "meta")
@@ -103,9 +80,7 @@ class MetadataManager:
             """)
 
     def load_metadata(
-        self,
-        dataset_type: DatasetType,
-        skip_problematic: bool = False
+        self, dataset_type: DatasetType, skip_problematic: bool = False
     ) -> pd.DataFrame:
         """Load metadata for specific dataset split.
 
@@ -134,9 +109,7 @@ class MetadataManager:
         return self.con.execute("SELECT * FROM problematic").df()
 
     def get_label_statistics(
-        self,
-        dataset_type: DatasetType,
-        skip_problematic: bool = False
+        self, dataset_type: DatasetType, skip_problematic: bool = False
     ) -> pd.DataFrame:
         """Get per-label counts using SQL aggregation.
 
@@ -185,11 +158,11 @@ class MetadataManager:
 class AudioLoader:
     """Handles audio file loading with efficient path management."""
 
-    def __init__(self, config: AudioDatasetConfig, dataset_type: DatasetType) -> None:
+    def __init__(self, config: "DataConfig", dataset_type: DatasetType) -> None:
         """Initialize audio loader.
 
         Args:
-            config: Dataset configuration
+            config: Data configuration from src.core.config
             dataset_type: Which dataset split to use
         """
         validate_dataset_type(dataset_type)
@@ -262,13 +235,13 @@ class AudioDataset(Dataset):
 
     def __init__(
         self,
-        config: AudioDatasetConfig,
+        config: "DataConfig",
         dataset_type: DatasetType = "train_curated",
     ) -> None:
         """Initialize dataset.
 
         Args:
-            config: Dataset configuration
+            config: Data configuration from src.core.config
             dataset_type: Which dataset split to load
         """
         self.config = config
@@ -329,9 +302,7 @@ def load_metadata(config_data: dict, which: str) -> pd.DataFrame:
     path = Path(config_data["base_dir"]) / (config_data["base_folder_name"] + "meta")
     allowed_types = ["train_curated", "train_noisy", "test", "vocabulary"]
     if which not in allowed_types:
-        raise ValueError(
-            f"Invalid dataset type: {which}. Must be {' | '.join(allowed_types)}."
-        )
+        raise ValueError(f"Invalid dataset type: {which}. Must be {' | '.join(allowed_types)}.")
     if which == "vocabulary":
         return pd.read_csv(path / "vocabulary.csv")
     return pd.read_csv(path / f"{which}_post_competition.csv")[["fname", "labels"]]

@@ -1,13 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+import matplotlib.pyplot as plt
 import numpy as np
 from numpy import pi
 from scipy import fft
-import matplotlib.pyplot as plt
 
-from .plot_utils import configure_axes
-
+from src.visualization.plots import configure_axes
 
 # ── Utility Functions ────────────────────────────────────────────────────────
 
@@ -88,17 +87,17 @@ def gaussian_pulse_bandwidth(sigma: float):
     # f_3dB = sqrt(-ln(0.7071) / (2*pi^2*sigma^2))
     # -np.log(0.7071)) = 0.173291590185971
     # return 2 * np.sqrt(0.173291590185971 / (pi * sigma) ** 2)
-    return np.sqrt(0.07023243613162203 / sigma ** 2)
+    return np.sqrt(0.07023243613162203 / sigma**2)
 
 
 def gaussian_sigma_from_bandwidth(bandwidth: float):
-    return np.sqrt(0.07023243613162203 / bandwidth ** 2)
+    return np.sqrt(0.07023243613162203 / bandwidth**2)
 
 
 def compute_analytical_fft_gaussian_pulse(frequencies: np.ndarray, sigma: float) -> Any:
     return (
         # np.exp(-2 * (pi * sigma * frequencies) ** 2)
-        np.exp((-2 * (pi * sigma) ** 2) * frequencies ** 2)
+        np.exp((-2 * (pi * sigma) ** 2) * frequencies**2)
     )
 
 
@@ -287,9 +286,7 @@ class LogSpacedFilterBank:
         # Compute log-spaced frequency bands
         cutoff_frequencies = np.geomspace(f_min, f_max, num_bands + 1)
         self.bandwidths = cutoff_frequencies[1:] - cutoff_frequencies[:-1]
-        self.center_frequencies = (
-            cutoff_frequencies[1:] + cutoff_frequencies[:-1]
-        ) / 2.0
+        self.center_frequencies = (cutoff_frequencies[1:] + cutoff_frequencies[:-1]) / 2.0
 
         # Pre-compute all kernels (cosine and sine modulated by envelope)
         self.envelopes = []
@@ -332,12 +329,12 @@ class LogSpacedFilterBank:
 # smooth and entirely analytical.
 
 _LN2 = np.log(2.0)
-_SUPER_GAUSSIAN_ALPHA_COEFF = 8.0 * _LN2   # alpha = coeff / bw^4
+_SUPER_GAUSSIAN_ALPHA_COEFF = 8.0 * _LN2  # alpha = coeff / bw^4
 
 
 def super_gaussian_alpha_from_bandwidth(bandwidth: float) -> float:
     """Return alpha such that exp(-alpha * f^4) = 1/sqrt(2) at f = bandwidth/2."""
-    return _SUPER_GAUSSIAN_ALPHA_COEFF / bandwidth ** 4
+    return _SUPER_GAUSSIAN_ALPHA_COEFF / bandwidth**4
 
 
 def super_gaussian_bandwidth_from_alpha(alpha: float) -> float:
@@ -363,7 +360,7 @@ def compute_analytical_fft_super_gaussian_pulse(
     frequencies : array of frequencies (Hz), centred at 0
     alpha       : shape parameter — use super_gaussian_alpha_from_bandwidth()
     """
-    return np.exp((-alpha) * frequencies ** 4)
+    return np.exp((-alpha) * frequencies**4)
 
 
 # ── Dev / demo ────────────────────────────────────────────────────────────────
@@ -397,13 +394,16 @@ def test_envelope_pattern(
     print(f"  Duration: {t_array[-1] - t_array[0]:.4f} s")
 
     # Compute numerical FFT
-    nfft = max(2**np.ceil(np.log2(n_samples)), 8192)
+    nfft = max(2 ** np.ceil(np.log2(n_samples)), 8192)
     fft_numerical = fft.fft(time_envelope, nfft)
     fft_numerical = fft.fftshift(fft_numerical)
     fft_numerical = fft_numerical / np.max(np.abs(fft_numerical))  # Normalize
 
     # Frequency array
-    freqs = fft.fftfreq(nfft, 1.0 / sample_rate, )
+    freqs = fft.fftfreq(
+        nfft,
+        1.0 / sample_rate,
+    )
     freqs = fft.fftshift(freqs)
 
     # Compute analytical spectrum
@@ -499,7 +499,7 @@ def test_filter_bank(
 
     # Get info
     info = filter_bank.get_info()
-    print(f"\nFilter bank created:")
+    print("\nFilter bank created:")
     print(f"  Envelope type: {info['envelope_type']}")
     print(f"  Kernel pairs count: {len(filter_bank.kernels)}")
 
@@ -602,8 +602,10 @@ def test_filter_bank(
             xlabel="Frequency (Hz)" if idx == 2 else None,
             ylabel="Magnitude",
             title=f"{label} Frequency Kernel FFTs",
-            xlim=(max(0, fc - 3 * filter_bank.bandwidths[band_idx]),
-                  fc + 3 * filter_bank.bandwidths[band_idx]),
+            xlim=(
+                max(0, fc - 3 * filter_bank.bandwidths[band_idx]),
+                fc + 3 * filter_bank.bandwidths[band_idx],
+            ),
             ylim=(1e-2, 2),
             grid=True,
             legend=True,
@@ -626,5 +628,3 @@ def dev_envelope_pattern():
     # Test filter banks
     test_filter_bank(GaussianEnvelope, f_min=20.0, f_max=2000.0, num_bands=20)
     test_filter_bank(SuperGaussianEnvelope, f_min=20.0, f_max=2000.0, num_bands=20)
-
-

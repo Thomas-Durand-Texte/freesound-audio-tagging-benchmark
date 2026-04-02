@@ -2,16 +2,17 @@
 
 import argparse
 import json
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 from tqdm import tqdm
 
-from src.utils import load_config
-from . import data, signal_tools, spectrogram_optimized
-from .data import DatasetType
+from src.core.utils import load_config
+from src.data import dataset as data
+from src.data.dataset import DatasetType
+from src.features import signal_tools, spectrogram_optimized
 
 
 def compute_dataset_statistics(config: dict, dataset_types: list[DatasetType]) -> dict:
@@ -67,11 +68,13 @@ def compute_dataset_statistics(config: dict, dataset_types: list[DatasetType]) -
             if is_problematic:
                 prob_info = problematic_df[problematic_df["filename"] == filename].iloc[0]
                 problem_type = prob_info["problem_type"]
-                problematic_found.append({
-                    "filename": filename,
-                    "type": problem_type,
-                    "labels": labels,
-                })
+                problematic_found.append(
+                    {
+                        "filename": filename,
+                        "type": problem_type,
+                        "labels": labels,
+                    }
+                )
 
             # Get audio info (without loading full waveform)
             sr, duration = dataset.audio_loader.get_audio_info(filename)
@@ -79,14 +82,16 @@ def compute_dataset_statistics(config: dict, dataset_types: list[DatasetType]) -
             sample_rates.append(sr)
             durations.append(duration)
 
-            file_info.append({
-                "filename": filename,
-                "labels": labels,
-                "sample_rate": sr,
-                "duration": duration,
-                "is_problematic": is_problematic,
-                "problem_type": problem_type,
-            })
+            file_info.append(
+                {
+                    "filename": filename,
+                    "labels": labels,
+                    "sample_rate": sr,
+                    "duration": duration,
+                    "is_problematic": is_problematic,
+                    "problem_type": problem_type,
+                }
+            )
 
         # Convert to numpy arrays for statistics
         sample_rates = np.array(sample_rates)
@@ -132,14 +137,18 @@ def compute_dataset_statistics(config: dict, dataset_types: list[DatasetType]) -
         print(f"  Total files: {stats['total_files']}")
         print(f"  Unique labels: {stats['unique_labels']}")
         print(f"  Total duration: {stats['durations']['sum_hours']:.2f} hours")
-        print(f"  Duration range: {stats['durations']['min']:.2f}s - {stats['durations']['max']:.2f}s")
+        print(
+            f"  Duration range: {stats['durations']['min']:.2f}s - {stats['durations']['max']:.2f}s"
+        )
         print(f"  Sample rates: {stats['sample_rates']['unique']}")
 
         # Warn about problematic files
         if problematic_found:
             print(f"\n  ⚠️  WARNING: Found {len(problematic_found)} problematic files:")
             for prob in problematic_found:
-                print(f"    - {prob['filename']}: {prob['type']} (labels: {', '.join(prob['labels'])})")
+                print(
+                    f"    - {prob['filename']}: {prob['type']} (labels: {', '.join(prob['labels'])})"
+                )
 
     return all_stats
 
@@ -152,7 +161,7 @@ def save_statistics(stats: dict, output_path: Path) -> None:
         output_path: Path to save JSON file
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         json.dump(stats, f, indent=2)
     print(f"\nStatistics saved to: {output_path}")
 
@@ -166,7 +175,7 @@ def load_statistics(stats_path: Path) -> dict:
     Returns:
         Statistics dictionary
     """
-    with open(stats_path, 'r') as f:
+    with open(stats_path) as f:
         stats = json.load(f)
     print(f"\nStatistics loaded from: {stats_path}")
     return stats
@@ -191,8 +200,8 @@ def display_statistics(stats: dict) -> None:
         print(f"  Unique labels: {dataset_stats['unique_labels']}")
 
         # Duration statistics
-        dur = dataset_stats['durations']
-        print(f"\n  Duration Statistics:")
+        dur = dataset_stats["durations"]
+        print("\n  Duration Statistics:")
         print(f"    Total: {dur['sum_hours']:.2f} hours")
         print(f"    Mean: {dur['mean']:.3f}s")
         print(f"    Median: {dur['median']:.3f}s")
@@ -203,24 +212,24 @@ def display_statistics(stats: dict) -> None:
         print(f"    95th percentile: {dur['percentile_95']:.3f}s")
 
         # Sample rate statistics
-        sr = dataset_stats['sample_rates']
-        print(f"\n  Sample Rate Statistics:")
+        sr = dataset_stats["sample_rates"]
+        print("\n  Sample Rate Statistics:")
         print(f"    Unique values: {sr['unique']}")
         print(f"    Mean: {sr['mean']:.1f} Hz")
         print(f"    Median: {sr['median']:.1f} Hz")
 
         # Check sample rate consistency
-        unique_sr = sr['unique']
+        unique_sr = sr["unique"]
         if len(unique_sr) == 1:
             print(f"    ✓ All files have the same sample rate: {unique_sr[0]} Hz")
         else:
             print(f"    ⚠️  WARNING: Files have different sample rates: {unique_sr}")
-            if 'distribution' in sr:
+            if "distribution" in sr:
                 print(f"       Distribution: {sr['distribution']}")
 
         # Top 20 labels
-        print(f"\n  Top 20 Labels by Count:")
-        label_counts = dataset_stats['label_counts']
+        print("\n  Top 20 Labels by Count:")
+        label_counts = dataset_stats["label_counts"]
         for i, (label, count) in enumerate(list(label_counts.items())[:20], 1):
             print(f"    {i:2d}. {label:30s}: {count:4d} files")
 
@@ -232,17 +241,17 @@ def display_statistics(stats: dict) -> None:
         # Figure 1: Duration distribution
         fig1, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
-        durations = [info['duration'] for info in dataset_stats['file_info']]
+        durations = [info["duration"] for info in dataset_stats["file_info"]]
 
-        ax1.hist(durations, bins=50, edgecolor='black', alpha=0.7)
-        ax1.set_xlabel('Duration (seconds)')
-        ax1.set_ylabel('Count')
-        ax1.set_title(f'Duration Distribution - {dataset_type}')
+        ax1.hist(durations, bins=50, edgecolor="black", alpha=0.7)
+        ax1.set_xlabel("Duration (seconds)")
+        ax1.set_ylabel("Count")
+        ax1.set_title(f"Duration Distribution - {dataset_type}")
         ax1.grid(True, alpha=0.3)
 
         ax2.boxplot(durations, vert=True)
-        ax2.set_ylabel('Duration (seconds)')
-        ax2.set_title(f'Duration Boxplot - {dataset_type}')
+        ax2.set_ylabel("Duration (seconds)")
+        ax2.set_title(f"Duration Boxplot - {dataset_type}")
         ax2.grid(True, alpha=0.3)
 
         fig1.tight_layout()
@@ -251,7 +260,7 @@ def display_statistics(stats: dict) -> None:
         # Figure 2: Top labels distribution
         fig2, ax = plt.subplots(figsize=(14, 8))
 
-        label_counts = dataset_stats['label_counts']
+        label_counts = dataset_stats["label_counts"]
         top_n = 30
         top_labels = list(label_counts.items())[:top_n]
         labels, counts = zip(*top_labels)
@@ -261,9 +270,9 @@ def display_statistics(stats: dict) -> None:
         ax.set_yticks(y_pos)
         ax.set_yticklabels(labels)
         ax.invert_yaxis()
-        ax.set_xlabel('Number of Files')
-        ax.set_title(f'Top {top_n} Labels by Count - {dataset_type}')
-        ax.grid(True, alpha=0.3, axis='x')
+        ax.set_xlabel("Number of Files")
+        ax.set_title(f"Top {top_n} Labels by Count - {dataset_type}")
+        ax.grid(True, alpha=0.3, axis="x")
 
         fig2.tight_layout()
         plt.show()
@@ -308,7 +317,7 @@ def compute_spectrograms(
 
     sample_rate = config["data"]["sample_rate"]
 
-    print(f"\nSpectrogram parameters:")
+    print("\nSpectrogram parameters:")
     print(f"  Frequency range: {f_min} - {f_max} Hz")
     if f_mid is not None:
         print(f"  Middle frequency: {f_mid} Hz (dual-range mode)")
@@ -382,7 +391,7 @@ def compute_spectrograms(
                 # Compute FFT for spectrum plot
                 waveform_fft = np.fft.rfft(waveform)
                 n_fft = len(waveform)
-                freqs = np.fft.rfftfreq(n_fft, 1/sr)
+                freqs = np.fft.rfftfreq(n_fft, 1 / sr)
 
                 # Create comprehensive figure
                 fig = plt.figure(figsize=(16, 12))
@@ -397,7 +406,7 @@ def compute_spectrograms(
                     spec,
                     aspect="auto",
                     origin="lower",
-                    extent=(0., time_end, 0., n_bands - 1.),
+                    extent=(0.0, time_end, 0.0, n_bands - 1.0),
                     cmap="viridis",
                     vmin=spec_vmin,
                     vmax=spec_max,
@@ -406,7 +415,9 @@ def compute_spectrograms(
                 # Add frequency ticks
                 freq_ticks_hz = np.array([20, 50, 100, 200, 500, 1000, 2000, 5000, 8000])
                 freq_ticks_hz = freq_ticks_hz[(freq_ticks_hz >= f_min) & (freq_ticks_hz <= f_max)]
-                band_indices = [np.argmin(np.abs(mr_filter_bank.center_frequencies - f)) for f in freq_ticks_hz]
+                band_indices = [
+                    np.argmin(np.abs(mr_filter_bank.center_frequencies - f)) for f in freq_ticks_hz
+                ]
 
                 ax1.set_yticks(band_indices)
                 ax1.set_yticklabels([f"{int(f)}" for f in freq_ticks_hz])
@@ -421,7 +432,7 @@ def compute_spectrograms(
                 ax2.set_xlabel("Frequency (Hz)")
                 ax2.set_ylabel("Magnitude")
                 ax2.set_title("Spectrum Magnitude (loglog)")
-                ax2.grid(True, alpha=0.3, which='both')
+                ax2.grid(True, alpha=0.3, which="both")
                 ax2.set_xlim((f_min, f_max))
 
                 # 3. Spectrum real part (semilogx)
@@ -430,7 +441,7 @@ def compute_spectrograms(
                 ax3.set_xlabel("Frequency (Hz)")
                 ax3.set_ylabel("Real Part")
                 ax3.set_title("Spectrum Real Part (semilogx)")
-                ax3.grid(True, alpha=0.3, which='both')
+                ax3.grid(True, alpha=0.3, which="both")
                 ax3.set_xlim((f_min, f_max))
 
                 # 4. Spectrum imaginary part (semilogx)
@@ -439,7 +450,7 @@ def compute_spectrograms(
                 ax4.set_xlabel("Frequency (Hz)")
                 ax4.set_ylabel("Imaginary Part")
                 ax4.set_title("Spectrum Imaginary Part (semilogx)")
-                ax4.grid(True, alpha=0.3, which='both')
+                ax4.grid(True, alpha=0.3, which="both")
                 ax4.set_xlim((f_min, f_max))
 
                 # 5. Waveform
@@ -453,7 +464,7 @@ def compute_spectrograms(
 
                 # Save figure
                 output_path = label_dir / f"{filename.replace('.wav', '.png')}"
-                fig.savefig(output_path, dpi=150, bbox_inches='tight')
+                fig.savefig(output_path, dpi=150, bbox_inches="tight")
                 plt.close(fig)
 
             except Exception as e:

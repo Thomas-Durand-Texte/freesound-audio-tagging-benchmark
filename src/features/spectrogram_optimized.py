@@ -10,12 +10,14 @@ from scipy.signal import oaconvolve
 try:
     import torch
     import torch.nn.functional as F
+
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
 
 try:
     import librosa
+
     LIBROSA_AVAILABLE = True
 except ImportError:
     LIBROSA_AVAILABLE = False
@@ -37,7 +39,7 @@ def compute_sg_spectrogram_fft_optimized(
 
     Returns:
         Tuple of (spectrogram, time_step, computation_time)
-        - spectrogram: 2D array (n_bands, n_frames) in cB
+        - spectrogram: 2D array (n_bands, n_frames) in Bell
         - time_step: Time between frames in seconds
         - computation_time: Computation time in seconds
     """
@@ -93,7 +95,11 @@ def compute_sg_spectrogram_fft_optimized(
 
         # Clip to valid FFT range
         i_start_pos = max(0, -bin_start_pos) if bin_start_pos < 0 else 0
-        i_end_pos = len(spectrum_vals) - max(0, bin_end_pos - n_fft // 2) if bin_end_pos > n_fft // 2 else len(spectrum_vals)
+        i_end_pos = (
+            len(spectrum_vals) - max(0, bin_end_pos - n_fft // 2)
+            if bin_end_pos > n_fft // 2
+            else len(spectrum_vals)
+        )
 
         bin_start_clipped = max(0, bin_start_pos)
         bin_end_clipped = min(n_fft // 2, bin_end_pos)
@@ -110,21 +116,26 @@ def compute_sg_spectrogram_fft_optimized(
 
         # Clip to valid FFT range (upper half)
         i_start_neg = max(0, (n_fft // 2) - bin_start_neg) if bin_start_neg < n_fft // 2 else 0
-        i_end_neg = len(spectrum_vals) - max(0, bin_end_neg - n_fft) if bin_end_neg > n_fft else len(spectrum_vals)
+        i_end_neg = (
+            len(spectrum_vals) - max(0, bin_end_neg - n_fft)
+            if bin_end_neg > n_fft
+            else len(spectrum_vals)
+        )
 
         bin_start_clipped_neg = max(n_fft // 2, bin_start_neg)
         bin_end_clipped_neg = min(n_fft, bin_end_neg)
 
         # Apply filter
         filtered_spectrum[bin_start_clipped_neg:bin_end_clipped_neg] = (
-            waveform_fft[bin_start_clipped_neg:bin_end_clipped_neg] * spectrum_vals[i_start_neg:i_end_neg]
+            waveform_fft[bin_start_clipped_neg:bin_end_clipped_neg]
+            * spectrum_vals[i_start_neg:i_end_neg]
         )
 
         # IFFT to time domain
         filtered_signal = np.real(fft.ifft(filtered_spectrum))
 
         # Magnitude squared and downsample (vectorized slice)
-        magnitude_squared = filtered_signal ** 2
+        magnitude_squared = filtered_signal**2
         magnitude_squared_downsampled = magnitude_squared[::hop_length][:n_frames]
 
         # Convert to cB
@@ -282,8 +293,8 @@ class GPUFilterBank:
                 # Symmetric padding (half on each side)
                 pad_left = pad_length // 2
                 pad_right = pad_length - pad_left
-                kernel_cos_padded = np.pad(kernel_cos, (pad_left, pad_right), mode='constant')
-                kernel_sin_padded = np.pad(kernel_sin, (pad_left, pad_right), mode='constant')
+                kernel_cos_padded = np.pad(kernel_cos, (pad_left, pad_right), mode="constant")
+                kernel_sin_padded = np.pad(kernel_sin, (pad_left, pad_right), mode="constant")
             else:
                 kernel_cos_padded = kernel_cos
                 kernel_sin_padded = kernel_sin
@@ -293,14 +304,10 @@ class GPUFilterBank:
 
         # Shape: (out_channels=n_bands, in_channels=1, kernel_length)
         self.kernels_cos_tensor = (
-            torch.from_numpy(np.stack(kernels_cos)[:, np.newaxis, :])
-            .float()
-            .to(device)
+            torch.from_numpy(np.stack(kernels_cos)[:, np.newaxis, :]).float().to(device)
         )
         self.kernels_sin_tensor = (
-            torch.from_numpy(np.stack(kernels_sin)[:, np.newaxis, :])
-            .float()
-            .to(device)
+            torch.from_numpy(np.stack(kernels_sin)[:, np.newaxis, :]).float().to(device)
         )
 
     def compute_spectrogram(
@@ -321,11 +328,7 @@ class GPUFilterBank:
 
         # Convert waveform to tensor and move to GPU
         waveform_tensor = (
-            torch.from_numpy(waveform)
-            .float()
-            .unsqueeze(0)
-            .unsqueeze(0)
-            .to(self.device)
+            torch.from_numpy(waveform).float().unsqueeze(0).unsqueeze(0).to(self.device)
         )
 
         # Start timing AFTER data transfer
@@ -382,7 +385,7 @@ def benchmark_spectrogram_methods(
     print(f"\n{'=' * 70}")
     print("Benchmarking Spectrogram Methods")
     print(f"{'=' * 70}")
-    print(f"Waveform length: {len(waveform)} samples ({len(waveform)/sample_rate:.2f}s)")
+    print(f"Waveform length: {len(waveform)} samples ({len(waveform) / sample_rate:.2f}s)")
     print(f"Sample rate: {sample_rate} Hz")
     print(f"Hop length: {hop_length}")
     print(f"Number of bands: {filter_bank.num_bands}")
@@ -610,7 +613,7 @@ class MultiResolutionFilterBank:
 
         level = 10  # Safety limit
         while level:
-            sr_ds = self.sample_rate / (2 ** level)
+            sr_ds = self.sample_rate / (2**level)
             if fmax_band <= sr_ds / 6:
                 break
             level -= 1
@@ -726,7 +729,7 @@ class MultiResolutionFilterBank:
             weight_start_neg=weight_start_neg,
             weight_end_neg=weight_end_neg,
             spectrum_weights=spectrum_vals,
-            spectrum_weights_pos=spectrum_vals[weight_start_pos: weight_end_pos],
+            spectrum_weights_pos=spectrum_vals[weight_start_pos:weight_end_pos],
         )
 
     def _prepare_signal(self, waveform: np.ndarray) -> np.ndarray:
@@ -816,17 +819,21 @@ class MultiResolutionFilterBank:
             filtered_signal = fft.ifft(filtered_spectrum)
 
             # Compute magnitude squared at downsampled rate
-            magnitude_squared = filtered_signal.real ** 2 + filtered_signal.imag ** 2
+            magnitude_squared = filtered_signal.real**2 + filtered_signal.imag**2
 
             # Determine effective hop length at this downsample level
             # At level L, signal is at rate sr/(2^L)
             # We want output at rate sr/hop_length
             # Effective hop at level L: hop_length/(2^L)
-            hop_effective = max(1, hop_length // (2 ** info.downsample_level))
+            hop_effective = max(1, hop_length // (2**info.downsample_level))
 
             # Downsample to final output rate using effective hop
             # magnitude_squared_downsampled = magnitude_squared[::hop_effective]
-            magnitude_squared_downsampled = magnitude_squared[:int(len(magnitude_squared)//hop_effective)*hop_effective].reshape(-1, hop_effective).mean(axis=1)
+            magnitude_squared_downsampled = (
+                magnitude_squared[: int(len(magnitude_squared) // hop_effective) * hop_effective]
+                .reshape(-1, hop_effective)
+                .mean(axis=1)
+            )
 
             # Ensure correct length (may differ slightly due to rounding)
             if len(magnitude_squared_downsampled) < n_frames:
@@ -847,3 +854,105 @@ class MultiResolutionFilterBank:
         return spectrogram, time_step, computation_time
 
 
+@dataclass
+class SpectrogramNormalization:
+    """Spectrogram dynamic range normalization configuration.
+
+    Combines two complementary approaches:
+    1. Psychoacoustic temporal masking (frame-wise)
+    2. Global noise floor normalization
+    """
+
+    # Frame-wise temporal masking (psychoacoustic)
+    # Based on human auditory masking: sounds >20dB below loudest are imperceptible
+    enable_temporal_masking: bool = True
+    masking_threshold_db: float = 20.0  # 2 Bell (20 dB below frame max/percentile)
+    masking_reference: str = "percentile"  # "max" or "percentile" for threshold reference
+    masking_percentile: float = 95.0  # Percentile for masking reference (more robust)
+
+    # Global noise floor removal
+    floor_db: float = 60.0  # Total dynamic range (6 Bell = 60 dB)
+    floor_reference: str = "global_max"  # "global_max", "percentile", "rms"
+    percentile: float = 95.0  # If using percentile reference
+
+    # Normalization method
+    normalize_method: str = "linear"  # "linear" → [0,1], "standardize" → zero mean/unit std, "none"
+
+
+def normalize_spectrogram_bell(
+    spec_bell: np.ndarray,  # Shape: (freq, time)
+    config: SpectrogramNormalization,
+) -> np.ndarray:
+    """
+    Normalize spectrogram using psychoacoustic masking + noise floor removal.
+
+    This combines two complementary approaches:
+    1. Frame-wise temporal masking: Removes imperceptible details based on
+       human auditory masking (sounds >20dB below loudest are inaudible)
+    2. Global floor normalization: Removes absolute noise floor and
+       normalizes to consistent dynamic range
+
+    Args:
+        spec_bell: Spectrogram in B (log magnitude), shape (freq, time)
+        config: SpectrogramNormalization configuration
+
+    Returns:
+        Normalized spectrogram in [0, 1] range (or standardized)
+    """
+    spec_processed = spec_bell.copy()
+
+    # STAGE 1: Global noise floor removal
+    # Determine floor reference level
+    if config.floor_reference == "global_max":
+        signal_level = spec_processed.max()
+    elif config.floor_reference == "percentile":
+        signal_level = np.percentile(spec_processed, config.percentile)
+    elif config.floor_reference == "rms":
+        # Use the 95th percentile as a robust signal level estimate
+        signal_level = np.percentile(spec_processed, 95)
+    else:
+        raise ValueError(f"Unknown floor_reference: {config.floor_reference}")
+
+    floor_level = signal_level - config.floor_db / 10
+
+    # Remove noise floor (set floor to 0)
+    spec_processed = np.maximum(0, spec_processed - floor_level)
+
+    # STAGE 2: Frame-wise temporal masking (psychoacoustic)
+    if config.enable_temporal_masking:
+        # Find reference level per time frame (95th percentile for robustness)
+        if config.masking_reference == "percentile":
+            ref_per_frame = np.percentile(
+                spec_processed, config.masking_percentile, axis=0, keepdims=True
+            )  # (1, time)
+        else:  # "max"
+            ref_per_frame = spec_processed.max(axis=0, keepdims=True)  # (1, time)
+
+        # Set masking threshold (20 dB below frame reference)
+        masking_threshold = ref_per_frame - config.masking_threshold_db / 10
+
+        # Set values below the threshold to 0
+        # This correctly implements psychoacoustic masking
+        spec_processed = np.where(
+            spec_processed < masking_threshold,
+            0,  # Set to floor level
+            spec_processed,  # Keep original value
+        )
+
+    # STAGE 3: Normalization
+    if config.normalize_method == "linear":
+        # Map to [0, 1]: 0 dB → 0, floor_db → 1
+        spec_norm = spec_processed / (config.floor_db / 10)
+
+    elif config.normalize_method == "standardize":
+        # Z-score normalization (mean=0, std=1)
+        mean = spec_processed.mean()
+        std = spec_processed.std() + 1e-8
+        spec_norm = (spec_processed - mean) / std
+
+    elif config.normalize_method == "none":
+        spec_norm = spec_processed
+    else:
+        raise ValueError(f"Unknown normalize_method: {config.normalize_method}")
+
+    return spec_norm

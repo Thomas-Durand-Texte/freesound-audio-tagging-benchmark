@@ -1,19 +1,19 @@
 """Spectrogram computation using custom filter banks and librosa comparison."""
 
 import time
-from pathlib import Path
 
 import librosa
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import fftconvolve
 
-from .plot_utils import configure_axes
-from .signal_tools import GaussianEnvelope, LogSpacedFilterBank, SuperGaussianEnvelope
-from .spectrogram_optimized import MultiResolutionFilterBank
+from src.features.signal_tools import LogSpacedFilterBank, SuperGaussianEnvelope
+from src.features.spectrogram_optimized import MultiResolutionFilterBank
+from src.visualization.plots import configure_axes
 
 try:
     import torch
+
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
@@ -56,7 +56,7 @@ def compute_super_gaussian_spectrogram(
 
         # Magnitude squared: |H(f)|^2 = coef_cos^2 + coef_sin^2
         # magnitude_squared = coef_cos**2 + coef_sin**2
-        magnitude_squared = coef_complex.real ** 2 + coef_complex.imag ** 2
+        magnitude_squared = coef_complex.real**2 + coef_complex.imag**2
 
         # Convert to dB: 10*log10(magnitude_squared)
         # Add small epsilon to avoid log(0)
@@ -172,14 +172,12 @@ def compare_spectrograms(
     )
     init_time = time.perf_counter() - init_start
     print(f"  Filter bank initialization: {init_time * 1000:.2f} ms")
-    print(f"  (Note: This is done once, not included in spectrogram computation)")
+    print("  (Note: This is done once, not included in spectrogram computation)")
 
     # ── 2. Compute custom SuperGaussian spectrogram ─────────────────────────────
     print(f"\n{'-' * 70}")
     print("Computing SuperGaussian spectrogram...")
-    sg_spec, sg_time, sg_comp_time = compute_super_gaussian_spectrogram(
-        waveform, filter_bank
-    )
+    sg_spec, sg_time, sg_comp_time = compute_super_gaussian_spectrogram(waveform, filter_bank)
     print(f"  Computation time: {sg_comp_time * 1000:.2f} ms")
     print(f"  Spectrogram shape: {sg_spec.shape}")
 
