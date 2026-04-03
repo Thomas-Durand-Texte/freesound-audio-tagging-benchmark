@@ -113,7 +113,7 @@ def test_audio_loading(config: Config, n_samples: int = 3) -> None:
         print(f"  Duration: {duration:.2f} seconds")
 
         # Load audio waveform
-        waveform, sr = dataset.audio_loader.load_audio(filename)
+        waveform, _sr = dataset.audio_loader.load_audio(filename)
         print(f"  Waveform shape: {waveform.shape}")
         print(f"  Waveform range: [{waveform.min():.3f}, {waveform.max():.3f}]")
 

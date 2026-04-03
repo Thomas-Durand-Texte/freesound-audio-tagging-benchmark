@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset, random_split
@@ -35,7 +36,7 @@ class SpectrogramDataset(Dataset):
 
     def __init__(
         self,
-        metadata,
+        metadata: pd.DataFrame,
         audio_loader: AudioLoader,
         filter_bank: MultiResolutionFilterBank,
         vocabulary: list[str],

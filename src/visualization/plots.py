@@ -1,12 +1,14 @@
 import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 
 
 def init_figure(
     figsize: tuple = (10, 6),
-    xlabel: str = None,
-    ylabel: str = None,
-    title: str = None,
-):
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    title: str | None = None,
+) -> tuple[Figure, Axes]:
     """Initialize figure with optional labels and title.
 
     Args:
@@ -24,17 +26,17 @@ def init_figure(
 
 
 def configure_axes(
-    ax,
-    xlabel: str = None,
-    ylabel: str = None,
-    title: str = None,
-    xlim: tuple = None,
-    ylim: tuple = None,
-    grid: bool = None,
+    ax: Axes,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    title: str | None = None,
+    xlim: tuple | None = None,
+    ylim: tuple | None = None,
+    grid: bool | None = None,
     grid_which: str = "both",
     grid_alpha: float = 0.3,
-    legend: bool = None,
-    legend_kwargs: dict = None,
+    legend: bool | None = None,
+    legend_kwargs: dict | None = None,
 ) -> None:
     """Configure axes properties with None-safe handling.
 

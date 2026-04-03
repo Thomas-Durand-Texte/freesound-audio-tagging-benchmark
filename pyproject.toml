@@ -52,14 +52,19 @@ select = [
 ]
 
 ignore = [
-    "ANN101",  # Missing type annotation for self
-    "ANN102",  # Missing type annotation for cls
     "ANN401",  # Dynamically typed expressions (Any) are disallowed
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["ANN"]  # Don't require annotations in tests
+"tests/**/*.py" = ["ANN", "NPY002", "E501"]  # Relaxed rules for tests
 "src/devel.py" = ["ANN"]   # Development/exploration scripts can be more relaxed
+"src/features/signal_tools.py" = ["PT028"]  # Test utility functions (not pytest tests)
+"src/scripts/devel.py" = ["PT028", "E501"]  # Development script - relaxed
+"src/scripts/explore.py" = ["E501"]  # Exploration script - relaxed line length
+"src/scripts/train.py" = ["NPY002"]  # Global seed setting for reproducibility
+"src/training/metrics.py" = ["NPY002"]  # Legacy numpy in __main__ test block is OK
+"**/losses.py" = ["N812"]  # Allow F for torch.nn.functional (PyTorch convention)
+"**/spectrogram_optimized.py" = ["N812"]  # Allow F for torch.nn.functional (PyTorch convention)
 
 [tool.ruff.format]
 quote-style = "double"

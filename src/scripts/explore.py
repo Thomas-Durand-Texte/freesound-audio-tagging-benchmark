@@ -47,7 +47,7 @@ def compute_dataset_statistics(config: dict, dataset_types: list[DatasetType]) -
 
         # Get label statistics using SQL
         label_stats_df = metadata_manager.get_label_statistics(dataset_type, skip_problematic=False)
-        label_counts = dict(zip(label_stats_df["label"], label_stats_df["count"]))
+        label_counts = dict(zip(label_stats_df["label"], label_stats_df["count"], strict=False))
 
         # Initialize statistics collectors
         sample_rates = []
@@ -263,7 +263,7 @@ def display_statistics(stats: dict) -> None:
         label_counts = dataset_stats["label_counts"]
         top_n = 30
         top_labels = list(label_counts.items())[:top_n]
-        labels, counts = zip(*top_labels)
+        labels, counts = zip(*top_labels, strict=False)
 
         y_pos = np.arange(len(labels))
         ax.barh(y_pos, counts, alpha=0.7)

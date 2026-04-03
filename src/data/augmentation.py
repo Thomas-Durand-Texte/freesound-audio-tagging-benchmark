@@ -8,6 +8,7 @@ from collections import deque
 from math import log, sqrt
 
 import numpy as np
+import torch
 
 # =============================================================================
 # Reverberation Augmentation (Image Source Method)
@@ -38,7 +39,7 @@ class _Point3D:
 
     __slots__ = ("x", "y", "z")
 
-    def __init__(self, x: float, y: float, z: float):
+    def __init__(self, x: float, y: float, z: float) -> None:
         self.x = x
         self.y = y
         self.z = z
@@ -53,7 +54,7 @@ class _Source(_Point3D):
 
     __slots__ = "amplitude"
 
-    def __init__(self, x: float, y: float, z: float, amplitude: float):
+    def __init__(self, x: float, y: float, z: float, amplitude: float) -> None:
         super().__init__(x, y, z)
         self.amplitude = amplitude
 
@@ -63,7 +64,7 @@ class _RoomGeometry:
 
     __slots__ = ("height", "length", "width")
 
-    def __init__(self, length: float, width: float, height: float):
+    def __init__(self, length: float, width: float, height: float) -> None:
         self.length = length
         self.width = width
         self.height = height
@@ -275,3 +276,92 @@ def apply_reverb(
     output = (1 - dry_wet_mix) * waveform + dry_wet_mix * wet_signal
 
     return output.astype(waveform.dtype)
+
+
+# =============================================================================
+# SpecAugment (Time and Frequency Masking)
+# =============================================================================
+
+
+def spec_augment(
+    spec: torch.Tensor,
+    freq_mask_param: int = 20,
+    time_mask_param: int = 40,
+    num_freq_masks: int = 2,
+    num_time_masks: int = 2,
+    rng: np.random.Generator | None = None,
+) -> torch.Tensor:
+    """Apply SpecAugment to spectrogram.
+
+    SpecAugment randomly masks rectangular patches in the time-frequency plane,
+    teaching the model to be robust to missing information. Simple yet highly
+    effective for audio classification.
+
+    Args:
+        spec: Spectrogram (freq, time) or (batch, 1, freq, time)
+        freq_mask_param: Maximum frequency bins to mask
+        time_mask_param: Maximum time frames to mask
+        num_freq_masks: Number of frequency masks
+        num_time_masks: Number of time masks
+        rng: Random number generator (if None, uses default)
+
+    Returns:
+        Augmented spectrogram (same shape as input)
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    spec = spec.clone()
+
+    # Handle both (F, T) and (B, 1, F, T)
+    if spec.dim() == 4:
+        batch_size = spec.shape[0]
+        # Apply to each sample in batch
+        for i in range(batch_size):
+            spec[i, 0] = _apply_spec_augment_single(
+                spec[i, 0], freq_mask_param, time_mask_param, num_freq_masks, num_time_masks, rng
+            )
+    else:
+        spec = _apply_spec_augment_single(
+            spec, freq_mask_param, time_mask_param, num_freq_masks, num_time_masks, rng
+        )
+
+    return spec
+
+
+def _apply_spec_augment_single(
+    spec: torch.Tensor,
+    freq_mask_param: int,
+    time_mask_param: int,
+    num_freq_masks: int,
+    num_time_masks: int,
+    rng: np.random.Generator,
+) -> torch.Tensor:
+    """Apply SpecAugment to single spectrogram.
+
+    Args:
+        spec: Spectrogram tensor (freq, time)
+        freq_mask_param: Maximum frequency bins to mask
+        time_mask_param: Maximum time frames to mask
+        num_freq_masks: Number of frequency masks to apply
+        num_time_masks: Number of time masks to apply
+        rng: Random number generator
+
+    Returns:
+        Augmented spectrogram (same shape as input)
+    """
+    freq_bins, time_frames = spec.shape
+
+    # Frequency masking (horizontal stripes)
+    for _ in range(num_freq_masks):
+        f = rng.integers(0, freq_mask_param + 1)
+        f0 = rng.integers(0, max(1, freq_bins - f))
+        spec[f0 : f0 + f, :] = 0
+
+    # Time masking (vertical stripes)
+    for _ in range(num_time_masks):
+        t = rng.integers(0, time_mask_param + 1)
+        t0 = rng.integers(0, max(1, time_frames - t))
+        spec[:, t0 : t0 + t] = 0
+
+    return spec

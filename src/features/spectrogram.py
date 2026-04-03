@@ -1,5 +1,6 @@
 """Spectrogram computation using custom filter banks and librosa comparison."""
 
+import importlib.util
 import time
 
 import librosa
@@ -11,12 +12,7 @@ from src.features.signal_tools import LogSpacedFilterBank, SuperGaussianEnvelope
 from src.features.spectrogram_optimized import MultiResolutionFilterBank
 from src.visualization.plots import configure_axes
 
-try:
-    import torch
-
-    TORCH_AVAILABLE = True
-except ImportError:
-    TORCH_AVAILABLE = False
+TORCH_AVAILABLE = importlib.util.find_spec("torch") is not None
 
 
 def compute_super_gaussian_spectrogram(
@@ -48,7 +44,7 @@ def compute_super_gaussian_spectrogram(
     spectrogram = np.zeros((n_bands, n_samples))
 
     # Compute response for each frequency band using pre-computed kernels
-    for i, (kernel_cos, kernel_sin) in enumerate(filter_bank.kernels):
+    for i, (_kernel_cos, kernel_sin) in enumerate(filter_bank.kernels):
         # Fast convolution using FFT with pre-computed kernels
         # coef_cos = fftconvolve(waveform, kernel_cos, mode="same")
         # coef_sin = fftconvolve(waveform, kernel_sin, mode="same")
@@ -432,7 +428,7 @@ def compare_spectrograms(
         transform=ax.transAxes,
         fontsize=10,
         verticalalignment="top",
-        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+        bbox={"boxstyle": "round", "facecolor": "wheat", "alpha": 0.8},
     )
 
     fig2.tight_layout()

@@ -31,7 +31,7 @@ def centered_time_array(n_samples: int, sample_rate: float) -> np.ndarray:
 class EnvelopePattern(ABC):
     """Abstract base class for envelope patterns (Gaussian, Super-Gaussian, etc.)."""
 
-    def __init__(self, bandwidth: float):
+    def __init__(self, bandwidth: float) -> None:
         """Initialize envelope with target bandwidth.
 
         Args:
@@ -78,7 +78,7 @@ class EnvelopePattern(ABC):
         pass
 
 
-def gaussian_pulse_bandwidth(sigma: float):
+def gaussian_pulse_bandwidth(sigma: float) -> float:
     # Compute analytical bandwidth (-3dB from max)
     # For a Gaussian spectrum G(f) = exp(-2*pi^2*sigma^2*f^2)
     # -3dB point occurs when G(f) = G(0) / sqrt(2) = 0.7071
@@ -90,7 +90,7 @@ def gaussian_pulse_bandwidth(sigma: float):
     return np.sqrt(0.07023243613162203 / sigma**2)
 
 
-def gaussian_sigma_from_bandwidth(bandwidth: float):
+def gaussian_sigma_from_bandwidth(bandwidth: float) -> float:
     return np.sqrt(0.07023243613162203 / bandwidth**2)
 
 
@@ -108,7 +108,7 @@ class GaussianEnvelope(EnvelopePattern):
     Frequency domain: exp(-2*pi^2*sigma^2*f^2)
     """
 
-    def __init__(self, bandwidth: float):
+    def __init__(self, bandwidth: float) -> None:
         """Initialize Gaussian envelope.
 
         Args:
@@ -162,7 +162,7 @@ class SuperGaussianEnvelope(EnvelopePattern):
     Time domain: computed via IFFT (no simple analytical formula)
     """
 
-    def __init__(self, bandwidth: float):
+    def __init__(self, bandwidth: float) -> None:
         """Initialize Super-Gaussian envelope.
 
         Args:
@@ -265,7 +265,7 @@ class LogSpacedFilterBank:
         num_bands: int,
         sample_rate: float,
         edge_threshold: float = 0.01,
-    ):
+    ) -> None:
         """Initialize filter bank with pre-computed kernels.
 
         Args:
@@ -293,7 +293,7 @@ class LogSpacedFilterBank:
         self.kernels = []  # List of (kernel_cos, kernel_sin) tuples
         self.kernel_time_arrays = []
 
-        for fc, bandwidth in zip(self.center_frequencies, self.bandwidths):
+        for fc, bandwidth in zip(self.center_frequencies, self.bandwidths, strict=False):
             envelope_obj = envelope_class(bandwidth)
             t_array, envelope = envelope_obj.time_domain(sample_rate, edge_threshold)
 
@@ -546,7 +546,7 @@ def test_filter_bank(
 
     fig, axes = plt.subplots(3, 1, figsize=(12, 9))
 
-    for idx, (band_idx, label) in enumerate(zip(indices, labels)):
+    for idx, (band_idx, label) in enumerate(zip(indices, labels, strict=False)):
         ax = axes[idx]
         fc = filter_bank.center_frequencies[band_idx]
         t_array = filter_bank.kernel_time_arrays[band_idx]
@@ -571,7 +571,7 @@ def test_filter_bank(
     # Plot 3: FFT of kernel pairs - Frequency domain
     fig, axes = plt.subplots(3, 1, figsize=(12, 9))
 
-    for idx, (band_idx, label) in enumerate(zip(indices, labels)):
+    for idx, (band_idx, label) in enumerate(zip(indices, labels, strict=False)):
         ax = axes[idx]
         fc = filter_bank.center_frequencies[band_idx]
         kernel_cos, kernel_sin = filter_bank.kernels[band_idx]
@@ -616,7 +616,7 @@ def test_filter_bank(
     plt.show()
 
 
-def dev_envelope_pattern():
+def dev_envelope_pattern() -> None:
     """Test both envelope patterns and filter banks."""
     # Test individual envelopes
     gaussian_env = GaussianEnvelope(bandwidth=100.0)

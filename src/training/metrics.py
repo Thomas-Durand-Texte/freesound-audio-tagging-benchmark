@@ -29,7 +29,7 @@ def lwlrap(predictions: np.ndarray, targets: np.ndarray) -> float:
     Returns:
         lwlrap score
     """
-    n_samples, n_classes = targets.shape
+    _n_samples, _n_classes = targets.shape
 
     # Compute per-sample weights (number of positive labels per sample)
     sample_weights = targets.sum(axis=1)

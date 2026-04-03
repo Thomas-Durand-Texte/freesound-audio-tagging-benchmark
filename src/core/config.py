@@ -6,6 +6,7 @@ validation, and clean dot notation access.
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -32,7 +33,7 @@ class DataConfig:
     clip_duration: float = 5.0
     problematic_files_path: str | None = "configs/problematic_files.csv"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Convert base_dir to Path object."""
         self.base_dir = Path(self.base_dir)
 
@@ -91,7 +92,7 @@ class ModelConfig:
     # Encoder configuration
     encoder_channels: list[int] = field(default_factory=lambda: [24, 32, 48, 96])
     encoder_repeats: list[int] = field(default_factory=lambda: [2, 2, 3, 3])
-    expansions: list[int] = field(default_factory=lambda: [4, 4, 6, 6])
+    expansions: list[int] = field(default_factory=lambda: [3, 3, 4, 4])  # Tuned for 300-500k params
 
     # Architecture details
     activation: str = "Mish"
@@ -189,7 +190,7 @@ class OutputConfig:
     figures_dir: Path = Path("reports/figures")
     tensorboard_dir: Path | None = Path("reports/tensorboard")
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Convert strings to Path objects and ensure all directories exist."""
         # Convert all string paths to Path objects
         for attr_name in ["model_dir", "metrics_dir", "figures_dir", "tensorboard_dir"]:
@@ -257,7 +258,7 @@ class Config:
         """
 
         # Convert dataclasses to dict recursively
-        def dataclass_to_dict(obj):
+        def dataclass_to_dict(obj: Any) -> Any:
             if hasattr(obj, "__dataclass_fields__"):
                 return {k: dataclass_to_dict(v) for k, v in obj.__dict__.items()}
             elif isinstance(obj, Path):

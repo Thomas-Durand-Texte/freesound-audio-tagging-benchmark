@@ -7,6 +7,8 @@ import numpy as np
 from scipy import fft
 from scipy.signal import oaconvolve
 
+from src.features.signal_tools import LogSpacedFilterBank
+
 try:
     import torch
     import torch.nn.functional as F
@@ -25,7 +27,7 @@ except ImportError:
 
 def compute_sg_spectrogram_fft_optimized(
     waveform: np.ndarray,
-    filter_bank,
+    filter_bank: LogSpacedFilterBank,
     hop_length: int = 512,
     spectrum_threshold: float = 0.01,
 ) -> tuple[np.ndarray, float, float]:
@@ -149,7 +151,7 @@ def compute_sg_spectrogram_fft_optimized(
 
 def compute_sg_spectrogram_oaconvolve_optimized(
     waveform: np.ndarray,
-    filter_bank,
+    filter_bank: LogSpacedFilterBank,
     hop_length: int = 512,
 ) -> tuple[np.ndarray, float, float]:
     """Overlap-add convolution with optimized downsampling.
@@ -194,7 +196,9 @@ def compute_sg_spectrogram_oaconvolve_optimized(
 class STFTFilterBank:
     """Pre-computed STFT filter bank weights."""
 
-    def __init__(self, filter_bank, n_fft: int = 2048, spectrum_threshold: float = 0.01):
+    def __init__(
+        self, filter_bank: LogSpacedFilterBank, n_fft: int = 2048, spectrum_threshold: float = 0.01
+    ) -> None:
         """Initialize and pre-compute filter weights.
 
         Args:
@@ -265,7 +269,7 @@ class STFTFilterBank:
 class GPUFilterBank:
     """Pre-computed GPU filter bank for PyTorch."""
 
-    def __init__(self, filter_bank, device: str = "mps"):
+    def __init__(self, filter_bank: LogSpacedFilterBank, device: str = "mps") -> None:
         """Initialize and move kernels to GPU.
 
         Args:
@@ -358,7 +362,7 @@ class GPUFilterBank:
 
 def benchmark_spectrogram_methods(
     waveform: np.ndarray,
-    filter_bank,
+    filter_bank: LogSpacedFilterBank,
     hop_length: int = 512,
     n_fft: int = 2048,
     spectrum_threshold: float = 0.01,
@@ -548,7 +552,7 @@ class MultiResolutionFilterBank:
         signal_duration: float,
         f_mid: float | None = None,
         spectrum_threshold: float = 0.001,
-    ):
+    ) -> None:
         """Initialize multi-resolution filter bank.
 
         Args:
@@ -596,7 +600,7 @@ class MultiResolutionFilterBank:
         self.band_infos = [self._precompute_band_processing(i) for i in range(num_bands)]
 
         # Determine unique downsample levels needed
-        self.downsample_levels = sorted(set(info.downsample_level for info in self.band_infos))
+        self.downsample_levels = sorted({info.downsample_level for info in self.band_infos})
 
     def _determine_downsample_level(self, fc: float, bw: float) -> int:
         """Determine optimal downsample level for a frequency band.
@@ -608,7 +612,7 @@ class MultiResolutionFilterBank:
         Returns:
             Number of downsampling steps (0 = no downsampling)
         """
-        fmin_band = fc - bw / 2
+        fc - bw / 2
         fmax_band = fc + bw / 2
 
         level = 10  # Safety limit
