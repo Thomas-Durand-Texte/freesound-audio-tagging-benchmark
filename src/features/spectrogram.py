@@ -6,6 +6,7 @@ import time
 import librosa
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 from scipy.signal import fftconvolve
 
 from src.features.signal_tools import LogSpacedFilterBank, SuperGaussianEnvelope
@@ -196,9 +197,11 @@ def compare_spectrograms(
     print(f"  Downsample levels used: {mr_filter_bank.downsample_levels}")
 
     print("Computing multi-resolution spectrogram...")
+    waveform_mps = torch.from_numpy(waveform).to("mps")
     mr_spec, mr_time_step, mr_comp_time = mr_filter_bank.compute_spectrogram(
-        waveform, hop_length=hop_length
+        waveform_mps, hop_length=hop_length
     )
+    mr_spec = mr_spec.to("cpu").numpy()
     # Create time axis for multi-resolution
     mr_time = np.arange(mr_spec.shape[1]) * mr_time_step
     print(f"  Computation time: {mr_comp_time * 1000:.2f} ms")
@@ -377,8 +380,8 @@ def compare_spectrograms(
         sr=sample_rate,
         n_fft=2048,
         n_mels=n_bands,
-        f_min=f_min,
-        f_max=f_max,
+        fmin=f_min,
+        fmax=f_max,
     )
     freqs_mel = librosa.fft_frequencies(sr=sample_rate, n_fft=2048)
 

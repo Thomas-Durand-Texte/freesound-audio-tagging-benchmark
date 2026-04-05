@@ -1,6 +1,6 @@
 dev-benchmark:
 	# Benchmark all methods
-	uv run python -m src.scripts.devel --config configs/your_config.yaml --test benchmark --n-samples 1
+	uv run python -m src.scripts.devel --config configs/baseline.yaml --test benchmark --n-samples 1
 
 	# Include GPU testing
 	#python -m src.scripts.devel --config configs/baseline.yaml --test benchmark --n-samples 1 --test-gpu
@@ -16,6 +16,8 @@ dev-envelope:
 	# Test audio dataset loading
 	#uv run python -m src.scripts.devel --config configs/your_config.yaml --test audio --n-samples 5
 
+dev-reverb:
+	uv run python -m src.scripts.devel --config configs/baseline.yaml --test reverb --n-samples 1
 
 explore-compute:
 	# Compute statistics (detects and warns about problematic files)
@@ -29,6 +31,14 @@ explore-display:
 	# Display statistics
 	uv run python -m src.scripts.explore --config configs/baseline.yaml --display-stats
 
+pytest:
+	uv run pytest -x
+
+ruff-check:
+	uv run ruff check --fix .
+
+ruff-format:
+	uv run ruff format .
 
 
 train:

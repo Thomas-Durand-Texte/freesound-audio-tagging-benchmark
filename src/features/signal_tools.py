@@ -3,8 +3,8 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 from numpy import pi
-from scipy import fft
 
 from src.visualization.plots import configure_axes
 
@@ -192,20 +192,30 @@ class SuperGaussianEnvelope(EnvelopePattern):
         df_target = self.bandwidth / 10.0
         n_fft = int(2 ** np.ceil(np.log2(sample_rate / df_target)))
 
-        # Create frequency array (centered at 0 for fftshift)
-        freqs = fft.fftfreq(n_fft, 1.0 / sample_rate)
-        freqs_shifted = fft.fftshift(freqs)
+        with torch.no_grad():
+            # Create frequency array (centered at 0 for fftshift)
+            freqs_torch = torch.fft.fftfreq(n_fft, 1.0 / sample_rate)
+            freqs_shifted_torch = torch.fft.fftshift(freqs_torch)
 
-        # Compute spectrum
-        spectrum = self.spectrum(freqs_shifted)
+            # Convert to numpy for spectrum computation (analytical formula uses numpy)
+            freqs_shifted = freqs_shifted_torch.numpy()
 
-        # IFFT to get time domain (unshift first)
-        spectrum_unshifted = fft.ifftshift(spectrum)
-        time_envelope = fft.ifft(spectrum_unshifted)
-        time_envelope = np.real(time_envelope)  # Should be real due to symmetry
+            # Compute spectrum
+            spectrum = self.spectrum(freqs_shifted)
 
-        # Shift time domain: IFFT puts negative times at end, move them to beginning
-        time_envelope = fft.fftshift(time_envelope)
+            # Convert spectrum to torch tensor
+            spectrum_torch = torch.from_numpy(spectrum).to(torch.complex64)
+
+            # IFFT to get time domain (unshift first)
+            spectrum_unshifted = torch.fft.ifftshift(spectrum_torch)
+            time_envelope_torch = torch.fft.ifft(spectrum_unshifted)
+            time_envelope_torch = time_envelope_torch.real  # Should be real due to symmetry
+
+            # Shift time domain: IFFT puts negative times at end, move them to beginning
+            time_envelope_torch = torch.fft.fftshift(time_envelope_torch)
+
+            # Convert to numpy for remaining processing
+            time_envelope = time_envelope_torch.numpy()
 
         # Normalize
         time_envelope = time_envelope / np.max(np.abs(time_envelope))
@@ -393,18 +403,20 @@ def test_envelope_pattern(
     print(f"  Time samples: {n_samples}")
     print(f"  Duration: {t_array[-1] - t_array[0]:.4f} s")
 
-    # Compute numerical FFT
+    # Compute numerical FFT using torch
     nfft = max(2 ** np.ceil(np.log2(n_samples)), 8192)
-    fft_numerical = fft.fft(time_envelope, nfft)
-    fft_numerical = fft.fftshift(fft_numerical)
+    with torch.no_grad():
+        time_envelope_torch = torch.from_numpy(time_envelope)
+        fft_numerical_torch = torch.fft.fft(time_envelope_torch, n=int(nfft))
+        fft_numerical_torch = torch.fft.fftshift(fft_numerical_torch)
+        fft_numerical = fft_numerical_torch.numpy()
     fft_numerical = fft_numerical / np.max(np.abs(fft_numerical))  # Normalize
 
     # Frequency array
-    freqs = fft.fftfreq(
-        nfft,
-        1.0 / sample_rate,
-    )
-    freqs = fft.fftshift(freqs)
+    with torch.no_grad():
+        freqs_torch = torch.fft.fftfreq(int(nfft), 1.0 / sample_rate)
+        freqs_torch = torch.fft.fftshift(freqs_torch)
+        freqs = freqs_torch.numpy()
 
     # Compute analytical spectrum
     spectrum_analytical = envelope.spectrum(freqs)
@@ -576,21 +588,29 @@ def test_filter_bank(
         fc = filter_bank.center_frequencies[band_idx]
         kernel_cos, kernel_sin = filter_bank.kernels[band_idx]
 
-        # Compute FFT of kernels
+        # Compute FFT of kernels using torch
         n_samples = len(kernel_cos)
         n_fft = max(2 ** int(np.ceil(np.log2(n_samples))), 4096)
 
-        fft_cos = fft.fft(kernel_cos, n_fft)
-        fft_cos = fft.fftshift(fft_cos)
+        with torch.no_grad():
+            kernel_cos_torch = torch.from_numpy(kernel_cos)
+            fft_cos_torch = torch.fft.fft(kernel_cos_torch, n=n_fft)
+            fft_cos_torch = torch.fft.fftshift(fft_cos_torch)
+            fft_cos = fft_cos_torch.numpy()
         fft_cos = fft_cos / np.max(np.abs(fft_cos))
 
-        fft_sin = fft.fft(kernel_sin, n_fft)
-        fft_sin = fft.fftshift(fft_sin)
+        with torch.no_grad():
+            kernel_sin_torch = torch.from_numpy(kernel_sin)
+            fft_sin_torch = torch.fft.fft(kernel_sin_torch, n=n_fft)
+            fft_sin_torch = torch.fft.fftshift(fft_sin_torch)
+            fft_sin = fft_sin_torch.numpy()
         fft_sin = fft_sin / np.max(np.abs(fft_sin))
 
         # Frequency array
-        freqs = fft.fftfreq(n_fft, 1.0 / sample_rate)
-        freqs = fft.fftshift(freqs)
+        with torch.no_grad():
+            freqs_torch = torch.fft.fftfreq(n_fft, 1.0 / sample_rate)
+            freqs_torch = torch.fft.fftshift(freqs_torch)
+            freqs = freqs_torch.numpy()
 
         # Plot magnitude
         ax.semilogy(freqs, np.abs(fft_cos), "b-", label="FFT(Cosine)", linewidth=1.5, alpha=0.8)

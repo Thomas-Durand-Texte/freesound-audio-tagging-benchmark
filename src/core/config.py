@@ -34,8 +34,10 @@ class DataConfig:
     problematic_files_path: str | None = "configs/problematic_files.csv"
 
     def __post_init__(self) -> None:
-        """Convert base_dir to Path object."""
+        """Convert paths to Path objects."""
         self.base_dir = Path(self.base_dir)
+        if self.problematic_files_path is not None:
+            self.problematic_files_path = Path(self.problematic_files_path)
 
 
 @dataclass
@@ -122,22 +124,25 @@ class AugmentationConfig:
     num_freq_masks: int = 2
     num_time_masks: int = 2
 
-    # Audio augmentations
+    # Waveform augmentations
     time_stretch: bool = True
-    time_stretch_range: tuple[float, float] = (0.8, 1.2)
+    time_stretch_range: tuple[float, float] = (0.9, 1.1)
 
     pitch_shift: bool = True
     pitch_shift_range: tuple[int, int] = (-2, 2)  # Semitones
 
     add_noise: bool = True
-    noise_std_range: tuple[float, float] = (0.001, 0.01)
-
-    reverberation: bool = False  # Computationally expensive
-    reverb_room_size_range: tuple[float, float] = (10.0, 100.0)  # meters
+    noise_snr_range: tuple[float, float] = (30.0, 40.0)  # SNR in dB
 
     freq_response_perturbation: bool = True
-    freq_response_std: float = 1.0  # dB
+    freq_response_n_bands: int = 8
+    freq_response_gain_std: float = 3.0  # dB
 
+    reverberation: bool = False
+    reverb_rt60_range: tuple[float, float] = (0.2, 1.5)  # Reverberation time in seconds
+    reverb_dry_wet_mix: float = 0.3
+
+    # Mixup augmentation
     mixup: bool = True
     mixup_alpha: float = 0.4
 

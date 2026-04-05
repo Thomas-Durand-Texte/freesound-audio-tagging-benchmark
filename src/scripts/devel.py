@@ -3,7 +3,10 @@
 import argparse
 import subprocess
 import sys
+import time
 from pathlib import Path
+
+import torch
 
 from src.core.config import Config
 from src.data.dataset import AudioDataset
@@ -301,6 +304,10 @@ def test_spectrogram_benchmark(
             print(f"  Downsample levels used: {mr_filter_bank.downsample_levels}")
 
             # Compute spectrogram
+            waveform = torch.from_numpy(waveform).to(mr_filter_bank.device)
+            # warmup
+            spec, time_step, comp_time = mr_filter_bank.compute_spectrogram(waveform, hop_length)
+            # compute
             spec, time_step, comp_time = mr_filter_bank.compute_spectrogram(waveform, hop_length)
             print(f"  Computation time: {comp_time * 1000:.2f} ms")
             print(f"  Output shape: {spec.shape}")
@@ -332,6 +339,170 @@ def test_spectrogram_benchmark(
                 print(f"{method:<30} {time_ms:<15.2f} {speedup_str:<20}")
 
 
+def test_reverb_augmentation(config: Config, n_samples: int = 1) -> None:
+    """Test reverberation augmentation with audio playback and visualization.
+
+    Args:
+        config: Configuration object
+        n_samples: Number of audio samples to test
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    from src.data.augmentation import apply_reverb
+
+    print("\n" + "=" * 70)
+    print("Reverberation Augmentation Test")
+    print("=" * 70)
+
+    # Create AudioDataset instance
+    dataset = AudioDataset(config.data, dataset_type="train_curated")
+
+    print(f"\nDataset size: {len(dataset)} samples")
+    print(f"Testing {n_samples} sample(s) with reverb augmentation")
+
+    # Reverb parameters
+    rt60_range = (0.5, 2.0)  # Reverberation time: 0.5-2.0 seconds
+    dry_wet_mix = 0.5  # 50% wet signal
+
+    print("\nReverb parameters:")
+    print(f"  RT60 range: {rt60_range[0]}-{rt60_range[1]} seconds")
+    print(f"  Dry/wet mix: {(1 - dry_wet_mix) * 100:.0f}% dry, {dry_wet_mix * 100:.0f}% wet")
+
+    for i in range(min(n_samples, len(dataset))):
+        # Find a sample with a recognizable label
+        target_labels = ["Acoustic_guitar", "Piano", "Violin_or_fiddle", "Flute", "Trumpet"]
+        sample_found = False
+
+        for idx in range(len(dataset)):
+            row = dataset.metadata.iloc[idx]
+            labels = row["labels"]
+            if any(label in labels for label in target_labels):
+                sample_found = True
+                break
+
+        if not sample_found:
+            # Fall back to first sample
+            idx = i
+            row = dataset.metadata.iloc[idx]
+
+        filename = row["fname"]
+        labels = row["labels"]
+
+        print(f"\n{'=' * 70}")
+        print(f"Sample {i + 1}: {filename}")
+        print(f"Labels: {labels}")
+        print(f"{'=' * 70}")
+
+        # Load audio waveform
+        waveform, sample_rate = dataset.audio_loader.load_audio(filename)
+
+        # Limit to first 5 seconds for reasonable test
+        max_samples = int(5.0 * sample_rate)
+        if len(waveform) > max_samples:
+            waveform = waveform[:max_samples]
+            print(f"  Truncated to {len(waveform) / sample_rate:.1f} seconds")
+
+        print(f"  Original waveform shape: {waveform.shape}")
+        print(f"  Sample rate: {sample_rate} Hz")
+
+        # Generate reverb with fixed seed for reproducibility
+        rng = np.random.default_rng(42)
+
+        print("\n  Applying reverberation...")
+        t0 = time.time()
+        reverbed_waveform = apply_reverb(
+            waveform=waveform,
+            sample_rate=sample_rate,
+            rt60_range=rt60_range,
+            dry_wet_mix=dry_wet_mix,
+            rng=rng,
+        )
+        print(f"  Reverberation time: {1000 * (time.time() - t0):.2f} ms")
+        print(f"  Reverbed waveform shape: {reverbed_waveform.shape}")
+
+        # Generate impulse response for visualization
+        from src.data.augmentation import _generate_room_impulse_response
+
+        rng_viz = np.random.default_rng(42)
+        impulse_response = _generate_room_impulse_response(
+            sample_rate=sample_rate,
+            rt60_range=rt60_range,
+            rng=rng_viz,
+        )
+
+        print(
+            f"  Impulse response length: {len(impulse_response)} samples ({len(impulse_response) / sample_rate:.2f}s)"
+        )
+
+        # Create visualization
+        _fig, axes = plt.subplots(3, 1, figsize=(14, 10))
+
+        # Plot 1: Impulse response
+        time_ir = np.arange(len(impulse_response)) / sample_rate
+        axes[0].plot(time_ir, impulse_response, linewidth=0.5, color="darkblue")
+        axes[0].set_xlabel("Time (s)")
+        axes[0].set_ylabel("Amplitude")
+        axes[0].set_title(
+            f"Room Impulse Response (RT60 ≈ {len(impulse_response) / sample_rate:.2f}s)"
+        )
+        axes[0].grid(True, alpha=0.3)
+
+        # Plot 2: Original waveform
+        time_orig = np.arange(len(waveform)) / sample_rate
+        axes[1].plot(time_orig, waveform, linewidth=0.5, color="green")
+        axes[1].set_xlabel("Time (s)")
+        axes[1].set_ylabel("Amplitude")
+        axes[1].set_title(f"Original Audio: {labels}")
+        axes[1].grid(True, alpha=0.3)
+        axes[1].set_ylim([-1.1, 1.1])
+
+        # Plot 3: Reverbed waveform
+        time_rev = np.arange(len(reverbed_waveform)) / sample_rate
+        axes[2].plot(time_rev, reverbed_waveform, linewidth=0.5, color="orangered")
+        axes[2].set_xlabel("Time (s)")
+        axes[2].set_ylabel("Amplitude")
+        axes[2].set_title(
+            f"Reverbed Audio (dry/wet: {(1 - dry_wet_mix) * 100:.0f}/{dry_wet_mix * 100:.0f}%)"
+        )
+        axes[2].grid(True, alpha=0.3)
+        axes[2].set_ylim([-1.1, 1.1])
+
+        plt.tight_layout()
+        plt.show()
+
+        # Save temporary files for playback
+        import tempfile
+
+        import soundfile as sf
+
+        with (
+            tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_orig,
+            tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_rev,
+        ):
+            # Write temporary audio files
+            sf.write(tmp_orig.name, waveform, sample_rate)
+            sf.write(tmp_rev.name, reverbed_waveform, sample_rate)
+
+            # Play original
+            print("\n  Playing ORIGINAL audio...")
+            result = play_audio_file(Path(tmp_orig.name))
+            if result == "quit":
+                print("\nPlayback stopped by user")
+                return
+
+            # Play reverbed
+            print("\n  Playing REVERBED audio...")
+            result = play_audio_file(Path(tmp_rev.name))
+            if result == "quit":
+                print("\nPlayback stopped by user")
+                return
+
+        print(f"\n{'=' * 70}")
+        print("Reverb test completed successfully!")
+        print(f"{'=' * 70}")
+
+
 def main() -> None:
     """Main development entry point."""
     parser = argparse.ArgumentParser(description="Development and testing tools")
@@ -340,9 +511,9 @@ def main() -> None:
     parser.add_argument(
         "--test",
         type=str,
-        choices=["audio", "signal", "spectrogram", "benchmark"],
+        choices=["audio", "signal", "spectrogram", "benchmark", "reverb"],
         default="signal",
-        help="Which test to run: audio (dataset loading), signal (envelope patterns), spectrogram (comparison), benchmark (optimized methods)",
+        help="Which test to run: audio (dataset loading), signal (envelope patterns), spectrogram (comparison), benchmark (optimized methods), reverb (reverberation augmentation)",
     )
     parser.add_argument(
         "--test-gpu",
@@ -369,6 +540,8 @@ def main() -> None:
         test_spectrogram_comparison(config, n_samples=args.n_samples)
     elif args.test == "benchmark":
         test_spectrogram_benchmark(config, n_samples=args.n_samples, test_gpu=args.test_gpu)
+    elif args.test == "reverb":
+        test_reverb_augmentation(config, n_samples=args.n_samples)
 
 
 if __name__ == "__main__":
